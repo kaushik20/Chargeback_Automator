@@ -44,20 +44,26 @@ class WorkOrderReportProcessor:
       logging.info(f"Rows after excluding Customer '2122': {self.df.shape[0]} rows")
 
    def process_chargeback(self, description_key, mrc_value_key):
-      email_pattern = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
-      filtered_rows = []
-      for index, row in self.df.iterrows():
-         if row['Description'] == description_key and pd.notna(row['Solution']):
-            email_matches = email_pattern.findall(row['Solution'])
+    email_pattern = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+    filtered_rows = []
+    for index, row in self.df.iterrows():
+        if row['Description'] == description_key and pd.notna(row['Solution']):
+            # Extract unique email addresses
+            email_matches = set(email_pattern.findall(row['Solution']))
             email_count = len(email_matches)
             if email_count > 0:
-               total_mrc = float(self.mrc_values[mrc_value_key].replace('$', '')) * email_count
-               new_row = row.copy()
-               new_row['MRC'] = f"${total_mrc:.2f}"
-               filtered_rows.append(new_row)
-      df_filtered = pd.DataFrame(filtered_rows)
-      self.filtered_dataframes.append(df_filtered)
-      logging.info(f"Rows processed for '{description_key}': {df_filtered.shape[0]} rows")
+                if mrc_value_key not in self.mrc_values:
+                    logging.warning(f"MRC value for '{mrc_value_key}' not found. Skipping row {index}.")
+                    continue
+                mrc_per_user = float(self.mrc_values[mrc_value_key].replace('$', ''))
+                total_mrc = mrc_per_user * email_count
+                new_row = row.copy()
+                new_row['MRC'] = f"${total_mrc:.2f}"
+                new_row['Email Count'] = email_count  # Add email count for debugging
+                filtered_rows.append(new_row)
+    df_filtered = pd.DataFrame(filtered_rows)
+    self.filtered_dataframes.append(df_filtered)
+    logging.info(f"Processed '{description_key}' with {len(filtered_rows)} rows.")
 
    def filter_assign_license_copilot(self):
       self.process_chargeback('Assign License - Copilot', 'Assign License - Copilot')
